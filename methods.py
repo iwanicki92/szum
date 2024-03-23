@@ -73,6 +73,9 @@ class LabeledDataset(Dataset):
             self._label_ranges[label] = Range(start_index, len(images) + start_index)
             start_index += len(images)
 
+    def copy(self):
+        return LabeledDataset(_dataset=(self.data.copy(), self._label_ranges.copy()))
+
     def normalize(self, *, mean: Any | None = None, std: Any | None = None, inplace = False):
         # all axes/dimensions except last
         axes = (*range(self.data.ndim - 1),)
@@ -83,7 +86,7 @@ class LabeledDataset(Dataset):
         if inplace:
             self.data = normalized
             return self, mean, std
-        return LabeledDataset(_dataset=(normalized, self._label_ranges)), mean, std
+        return LabeledDataset(_dataset=(normalized, self._label_ranges.copy())), mean, std
         
     def __getitem__(self, key):
         if isinstance(key, Label):
