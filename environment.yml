@@ -1,0 +1,14 @@
+name: szum
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - matplotlib
+  - tabulate
+  - numpy
+  - scipy
+  - ipykernel
+  - opencv
+  - libopencv
+  - py-opencv
+prefix: /home/iwans/.conda/envs/szum
