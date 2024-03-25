@@ -11,4 +11,7 @@ dependencies:
   - opencv
   - libopencv
   - py-opencv
+  - pyzmq[version='<25']
+  - notebook
+  - jupyter_client[version='<8']
 prefix: /home/iwans/.conda/envs/szum
