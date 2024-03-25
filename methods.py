@@ -78,7 +78,7 @@ class LabeledDataset(Dataset):
 
     def normalize(self, *, mean: Any | None = None, std: Any | None = None, inplace = False):
         # all axes/dimensions except last
-        axes = (*range(self.data.ndim - 1),)
+        axes = tuple(range(self.data.ndim - 1))
         # calculate mean and std for each channel
         mean: np.ndarray = self.data.mean(axis=axes) if mean is None else mean
         std: np.ndarray = self.data.std(axis=axes) if std is None else std
