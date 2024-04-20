@@ -78,7 +78,7 @@ class LabeledDataset(Dataset):
         labeled_images = self._load_images(dataset_path, new_size)
         if uniform_size:
             labeled_images = self._remove_excess(labeled_images)
-        self.data = np.vstack(list(labeled_images.values()), dtype=np.uint8)
+        self.data = np.vstack(list(labeled_images.values()))
 
         # remember indexes (start/end) of labels
         self._label_ranges: dict[Label, Range] = {}

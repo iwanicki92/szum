@@ -45,15 +45,11 @@ def normalize(splits: list[Split]):
     splits[1] = Split(splits[1].train, splits[1].val, splits[1].test)
 
 def create_split3(splits: list[Split]):
-    rng = np.random.default_rng(seed=999)
-    split3_val = {
-        label: rng.choice(splits[1].train[label], size=len(splits[1].val[label]), replace=False)
-        for label in Label}
-
-    ranges = np.cumsum([0, *[len(split3_val[label]) for label in Label]])
-    ranges = {label: Range(start ,end) for label, (start, end) in zip(Label, zip(ranges, ranges[1::]))}
-    split3_val = LabeledDataset(_dataset=(np.vstack(list(split3_val.values())), ranges))
-    splits.append(Split(splits[1].train, split3_val, splits[1].test))
+    split3_train = LabeledDataset(_labels_with_dataset= {
+        label: np.vstack([splits[1].train[label], splits[1].val[label]])
+        for label in Label
+    })
+    splits.append(Split(split3_train, splits[1].val, splits[1].test))
 
 def create_dataset():
     dataset_path = Path("dataset")
