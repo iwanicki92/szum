@@ -83,6 +83,8 @@ def train(split: Split):
         plot_model(ax1, ax2, scores, iteration)
         if scores['val loss'][-1] < best_loss:
             joblib.dump(classifier, Path(model_path) / "best")
+            best_loss = scores['val loss'][-1]
+            print(f"{best_loss=}")
         with statistics_path.open("a", encoding="utf-8") as file:
             stats = ','.join([
                 str(iteration), str(scores['train loss'][-1]), str(scores['val loss'][-1]), 
@@ -102,8 +104,12 @@ def main():
     signal(SIGINT, stop_handler)
 
     splits = load_dataset()
+    split_1 = splits[1]
+    del splits
+    import gc
+    gc.collect()
 
-    train(splits[1])
+    train(split_1)
 
 
 if __name__ == "__main__":
