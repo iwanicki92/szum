@@ -5,6 +5,7 @@ from typing import Any, NamedTuple
 import cv2
 from cv2.typing import MatLike
 import numpy as np
+from numpy.typing import NDArray
 
 
 class Channel(IntEnum):
@@ -28,10 +29,9 @@ class Range(NamedTuple):
 class Dataset:
     RNG_SEED = 1234
 
-    def __init__(self, dataset: MatLike | None = None) -> None:
+    def __init__(self, dataset: NDArray[np.uint8] | NDArray[np.float64] | None = None) -> None:
         self.data = np.empty(0) if dataset is None else dataset
         self._rng = np.random.default_rng(seed=self.RNG_SEED)
-
 
     def __getitem__(self, key):
         return self.data.__getitem__(key)
@@ -45,6 +45,8 @@ class LabeledDataset(Dataset):
                  dataset_path: PathLike | str = None,
                  uniform_size = True, 
                  new_size: tuple[int, int] | None = (200, 200),
+                 mean: Any = None,
+                 std: Any = None,
                  **kwargs
                  ) -> None:
         """load dataset
@@ -54,9 +56,21 @@ class LabeledDataset(Dataset):
             uniform_size (bool, optional): Make sure all labels contain same amount of images by removing excess.
             new_size (tuple[int, int] | None, optional): If not None then resize images to (w, h) pixels. Defaults to (200, 200).
         """
+        self.mean = mean
+        self.std = std
+
         if "_dataset" in kwargs:
             data, self._label_ranges = kwargs["_dataset"]
             super().__init__(data)
+            return
+        
+        if "_labels_with_dataset" in kwargs:
+            data: dict[Label, NDArray] = kwargs['_labels_with_dataset']
+            ranges = np.cumsum([0, *[len(images) for images in data.values()]])
+            ranges = [Range(start, end) for start, end in zip(ranges[:], ranges[1:])]
+            ranges = {label: range for label, range in zip(Label, ranges)}
+            self._label_ranges = ranges
+            super().__init__(np.vstack(list(data.values())))
             return
         
         super().__init__()
@@ -64,7 +78,7 @@ class LabeledDataset(Dataset):
         labeled_images = self._load_images(dataset_path, new_size)
         if uniform_size:
             labeled_images = self._remove_excess(labeled_images)
-        self.data = np.vstack(list(labeled_images.values()))
+        self.data = np.vstack(list(labeled_images.values()), dtype=np.uint8)
 
         # remember indexes (start/end) of labels
         self._label_ranges: dict[Label, Range] = {}
@@ -85,8 +99,9 @@ class LabeledDataset(Dataset):
         normalized = (self.data - mean) / std
         if inplace:
             self.data = normalized
+            self.mean, self.std = mean, std
             return self, mean, std
-        return LabeledDataset(_dataset=(normalized, self._label_ranges.copy())), mean, std
+        return LabeledDataset(mean=mean, std=std, _dataset=(normalized, self._label_ranges.copy())), mean, std
         
     def __getitem__(self, key):
         if isinstance(key, Label):
@@ -181,6 +196,12 @@ class LabeledDataset(Dataset):
                 )
                 for new_indices, split in zip(new_label_ranges, splits)
         ]
+
+
+class Split(NamedTuple):
+    train: LabeledDataset
+    val: LabeledDataset
+    test: LabeledDataset
 
 
 def main():
