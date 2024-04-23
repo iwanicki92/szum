@@ -6,6 +6,7 @@ import cv2
 from cv2.typing import MatLike
 import numpy as np
 from numpy.typing import NDArray
+import skimage.filters as sk_filters
 
 
 class Channel(IntEnum):
@@ -91,11 +92,15 @@ class LabeledDataset(Dataset):
         return LabeledDataset(_dataset=(self.data.copy(), self._label_ranges.copy()))
 
     def normalize(self, *, mean: Any | None = None, std: Any | None = None, inplace = False):
-        # all axes/dimensions except last
-        axes = tuple(range(self.data.ndim - 1))
+        # convert to greyscale & apply scharr (edge detection) filter
+        grey_dataset = np.empty(self.data.shape[:-1], dtype=np.float64)
+        for i, image in enumerate(self.data):
+            grey_dataset[i] = sk_filters.scharr(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
+        self.data = grey_dataset
+
         # calculate mean and std for each channel
-        mean: np.ndarray = self.data.mean(axis=axes) if mean is None else mean
-        std: np.ndarray = self.data.std(axis=axes) if std is None else std
+        mean: np.ndarray = self.data.mean() if mean is None else mean
+        std: np.ndarray = self.data.std() if std is None else std
         normalized = (self.data - mean) / std
         if inplace:
             self.data = normalized

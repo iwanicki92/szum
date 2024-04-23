@@ -31,7 +31,7 @@ def plot_model(ax1, ax2, scores, iteration):
 
 def train(split: Split):
     print("Training")
-    model_path = Path("models") / str(datetime.now().strftime("%Y-%m-%d_%H:%M:%S"))
+    model_path = Path("models") / str(datetime.now().strftime("%Y-%m-%d %H_%M_%S"))
     model_path.mkdir(parents=True)
     statistics_path = model_path / 'stats.csv'
     statistics_path.write_text("iteration,train loss,val loss,train accuracy,val accuracy,total time\n", encoding="utf-8")
@@ -43,7 +43,7 @@ def train(split: Split):
     scores = {'train loss': [], 'val loss': [], 'train accuracy': [], 'val accuracy': []}
     iterations = 10000
     hidden_layers = (100,100)
-    classifier = MLPClassifier(hidden_layer_sizes=hidden_layers, random_state=5000, max_iter=1)
+    classifier = MLPClassifier(hidden_layer_sizes=hidden_layers, random_state=5000, max_iter=10)
 
     train_y = [
         y
@@ -95,15 +95,7 @@ def train(split: Split):
     print("Training complete")
 
 def main():
-    original_handler = getsignal(SIGINT)
-    # First Ctrl+C will exit loop after ending current iterations, second one will use default handler
-    def stop_handler(_, _2):
-        global stop
-        stop = True
-        signal(SIGINT, original_handler)
-    signal(SIGINT, stop_handler)
-
-    splits = load_dataset()
+    splits = load_dataset(recreate=True)
     split_1 = splits[1]
     del splits
     import gc
@@ -111,8 +103,110 @@ def main():
 
     train(split_1)
 
+import keras
+from keras import layers, regularizers, callbacks
+import cv2
+
+class TerminateOnFlag(callbacks.Callback):
+    """Callback that terminates training when flag=1 is encountered.
+    """
+
+    def on_batch_end(self, batch, logs=None):
+        if stop == True:    
+            self.model.stop_training = True
+
+def train_autoencoder():
+    split_1 = load_dataset()[1]
+
+    # This is the size of our encoded representations
+
+    # This is our input image
+    resized = np.empty(shape=(len(split_1.train.data), 256, 256), dtype=np.float64)
+    for i, image in enumerate(split_1.train.data):
+        resized[i] = cv2.resize(image, (256,256), interpolation=cv2.INTER_AREA)
+    split_1.train.data = resized
+    resized = np.empty(shape=(len(split_1.val.data), 256, 256), dtype=np.float64)
+    for i, image in enumerate(split_1.val.data):
+        resized[i] = cv2.resize(image, (256,256), interpolation=cv2.INTER_AREA)
+    split_1.val.data = resized
+
+    shape = (*split_1.train.data[0].shape,1)
+    print(shape)
+    input_img = keras.Input(shape=shape)
+
+    x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(input_img)
+    x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(x)
+    x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    x = layers.Conv2D(4, (3, 3), activation='relu', padding='same')(x)
+    encoded = layers.MaxPooling2D((2, 2), padding='same')(x)
+
+    # at this point the representation is (4, 4, 8) i.e. 128-dimensional
+
+    x = layers.Conv2D(4, (3, 3), activation='relu', padding='same')(encoded)
+    x = layers.UpSampling2D((2, 2))(x)
+    x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    x = layers.UpSampling2D((2, 2))(x)
+    x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(x)
+    x = layers.UpSampling2D((2, 2))(x)
+    x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(x)
+    x = layers.UpSampling2D((2, 2))(x)
+    decoded = layers.Conv2D(1, (3, 3), activation='sigmoid', padding='same')(x)
+    
+    autoencoder = keras.Model(input_img, decoded)
+    autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
+    autoencoder.summary()
+
+    autoencoder.fit(split_1.train.data, split_1.train.data,
+                epochs=50,
+                batch_size=64,
+                shuffle=True,
+                validation_data=(split_1.val.data, split_1.val.data),
+                callbacks=[callbacks.TensorBoard(log_dir='/tmp/autoencoder'), TerminateOnFlag()])
+
+    decoded_imgs = autoencoder.predict(split_1.val.data)
+    encoder = keras.Model(input_img, encoded)
+    encoded_imgs = encoder.predict(split_1.val.data)
+
+    n = 10  # How many digits we will display
+    for label in Label:
+        plt.figure(figsize=shape[:-1])
+        for i in range(n):
+            # Display original
+            ax = plt.subplot(2, n, i + 1)
+            plt.imshow(split_1.val[split_1.val._label_ranges[label].start + i])
+            #plt.gray()
+            ax.get_xaxis().set_visible(False)
+            ax.get_yaxis().set_visible(False)
+
+            # Display reconstruction
+            ax = plt.subplot(2, n, i + 1 + n)
+            plt.imshow(decoded_imgs[split_1.val._label_ranges[label].start + i])
+            #plt.gray()
+            ax.get_xaxis().set_visible(False)
+            ax.get_yaxis().set_visible(False)
+        plt.show(block=False)
+    for label in Label:
+        fig = plt.figure()
+        fig.suptitle(label.name)
+        for i in range(1, n):
+            ax = plt.subplot(1, n, i + 1)
+            plt.imshow(encoded_imgs[split_1.val._label_ranges[label].start + i].reshape((16, -1)).T)
+            #plt.gray()
+            ax.get_xaxis().set_visible(False)
+            ax.get_yaxis().set_visible(False)
 
 if __name__ == "__main__":
+    original_handler = getsignal(SIGINT)
+    # First Ctrl+C will exit loop after ending current iterations, second one will use default handler
+    def stop_handler(_, _2):
+        global stop
+        stop = True
+        signal(SIGINT, original_handler)
+    signal(SIGINT, stop_handler)
     plt.show(block=False)
-    main()
+    train_autoencoder()
+    #main()
     plt.show()
