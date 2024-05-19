@@ -51,14 +51,14 @@ def create_split3(splits: list[Split]):
     })
     splits.append(Split(split3_train, splits[1].val, splits[1].test))
 
-def create_dataset():
+def create_dataset(*, do_augment = True):
     dataset_path = Path("dataset")
-    dataset = LabeledDataset(dataset_path=dataset_path)
+    dataset = LabeledDataset(dataset_path=dataset_path, new_size=(128,128))
     dataset_unchanged = LabeledDataset(dataset_path=dataset_path, uniform_size=False, new_size=None)
     splits = [Split(*dataset_unchanged.split_dataset()), Split(*dataset.split_dataset())]
     train = splits[1].train
     print("Augmenting dataset")
-    augmented = augment(train)
+    augmented = augment(train) if do_augment else train
     splits[1] = Split(augmented.copy(), splits[1].val, splits[1].test)
     print("Normalizing dataset")
     normalize(splits)
@@ -81,7 +81,7 @@ def save_dataset(splits: list[Split]):
             np.save(split_path / 'mean', split.train.mean)
             np.save(split_path / 'std', split.train.std)
 
-def load_dataset(*, recreate = False, save = True):
+def load_dataset(*, recreate = False, save = True, **kwargs):
     """_summary_
 
     Args:
@@ -93,7 +93,7 @@ def load_dataset(*, recreate = False, save = True):
     """
     if not Path("dataset/splits").is_dir() or recreate:
         print("Creating dataset")
-        splits = create_dataset()
+        splits = create_dataset(**kwargs)
         if save:
             if Path("dataset/splits").exists():
                 print("Deleting old dataset")
@@ -112,11 +112,11 @@ def load_dataset(*, recreate = False, save = True):
                 label: np.load(f"dataset/splits/{split}/{set}/{label.name}.npy", allow_pickle=True)
                 for label in Label
                 }
-        mean_path = Path(f"dataset/splits/{split}/mean")
-        std_path = Path(f"dataset/splits/{split}/std")
+        mean_path = Path(f"dataset/splits/{split}/mean.npy")
+        std_path = Path(f"dataset/splits/{split}/std.npy")
         if mean_path.exists() and std_path.exists():
-            mean = np.load(mean, allow_pickle=True)
-            std = np.load(std, allow_pickle=True)
+            mean = np.load(mean_path, allow_pickle=True)
+            std = np.load(std_path, allow_pickle=True)
         splits.append(Split(**{
             set_str: LabeledDataset(_labels_with_dataset=set, mean=mean, std=std)
             for set_str, set in sets.items()

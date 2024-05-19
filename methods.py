@@ -92,13 +92,6 @@ class LabeledDataset(Dataset):
         return LabeledDataset(_dataset=(self.data.copy(), self._label_ranges.copy()))
 
     def normalize(self, *, mean: Any | None = None, std: Any | None = None, inplace = False):
-        # convert to greyscale & apply scharr (edge detection) filter
-        grey_dataset = np.empty(self.data.shape[:-1], dtype=np.float64)
-        for i, image in enumerate(self.data):
-            grey_dataset[i] = sk_filters.scharr(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
-        self.data = grey_dataset
-
-        # calculate mean and std for each channel
         mean: np.ndarray = self.data.mean() if mean is None else mean
         std: np.ndarray = self.data.std() if std is None else std
         normalized = (self.data - mean) / std
@@ -129,6 +122,7 @@ class LabeledDataset(Dataset):
                 try:
                     img = cv2.imread(str(img_path))
                     if resize is not None and img.shape != resize:
+                        img = sk_filters.scharr(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
                         img = cv2.resize(img, resize, interpolation=cv2.INTER_AREA)
                     labeled_images[label].append(img)
                 except Exception as ex:
